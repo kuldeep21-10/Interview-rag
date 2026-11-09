@@ -1,4 +1,4 @@
-
+import mongoose from "mongoose";
 
 const itemSchema = new mongoose.Schema({
   question: { type: String, required: true },
@@ -26,11 +26,11 @@ const sessionSchema = new mongoose.Schema(
       ref: "user", // tumhare User model ke naam se match hona chahiye
       required: true,
     },
-    techStack: {
-      type: [String],
-      enum: ["JS", "Node", "MongoDB", "React", "DBMS", "OS"],
-      required: true,
-    },
+      techStack: {
+       type: [{ type: String, enum: ["JS", "Node", "MongoDB", "React", "DBMS", "OS"] }],
+       required: true,
+       },
+
     difficulty: {
       type: String,
       enum: ["easy", "medium", "hard"],

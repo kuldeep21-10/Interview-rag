@@ -1,11 +1,12 @@
  import express from 'express';
  import { user } from '../models/user.model.js';
+ import sessionModel from '../models/session.model.js';
  import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken"
 import { auth } from '../middleware/auth.js';
  import { EMAIL_REGEX,
     isValidPassword,
-    normalizeEmail,bad ,isvaliduser } from './helpers.js';
+    normalizeEmail,bad ,isvaliduser, generateQuestions } from './helpers.js';
 
 
 
@@ -103,6 +104,92 @@ app.get("/me", auth, async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+app.post('/api/session',auth, async(req,res)=>{
+  try{
+     
+      const { techStack, difficulty = "medium", count = 5 } = req.body;
+
+    if (!techStack || techStack.length === 0) {
+      return res.status(400).json({ message: "techStack is required" });
+    }
+     
+    const questions = await generateQuestions(techStack, difficulty, count);
+     const session = await sessionModel.create({
+  user: req.userId,
+  techStack,
+  difficulty,
+  items: questions.map((q) => ({
+    question: q.question,
+    topic: q.topic,
+  })),
+});
+ res.status(201).json(session);
+  }
+  catch(error){
+    console.log(error);
+    
+    res.status(500).json({ message: "Could not start session" });
+  }
+});
+
+app.post('/api/session/:id/complete', auth ,async(req,res)=>{
+try{
+   const session = await sessionModel.findOne({
+      _id: req.params.id,
+      user: req.userId, // start route wala hi
+    });
+     if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+    if (session.status === "completed") {
+      return res.status(400).json({ message: "Session already completed" });
+    }
+
+    session.status = "completed";
+    session.completedAt = new Date();
+    await session.save();
+
+  res.json(session);
+
+}
+catch(error){
+  res.status(500).json({message:'could not complete session'})
+}
+});
+
+app.post('/api/session/:id/answer',auth,async(req,res)=>{
+  try{
+
+    const{itemIndex, answer, timeTaken} =req.body;
+
+     const session = await sessionModel.findOne({
+      _id: req.params.id,
+      user: req.userId, // start route wala hi
+    });
+       if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+    if (session.status === "completed") {
+      return res.status(400).json({ message: "Session already completed" });
+    }
+    if (!session.items[itemIndex]) {
+      return res.status(400).json({ message: "Invalid question index" });
+    }
+    if (!answer || !answer.trim()) {
+      return res.status(400).json({ message: "Answer is required" });
+    }
+      session.items[itemIndex].answer = answer;
+    session.items[itemIndex].timeTaken = timeTaken;
+    await session.save();
+
+    res.json({ message: "Answer saved" });
+
+  }
+  catch(error){
+    res.status(500).json({message:"Could not save answer"})
   }
 });
 
