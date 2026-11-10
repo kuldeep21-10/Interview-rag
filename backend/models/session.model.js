@@ -8,6 +8,7 @@ const itemSchema = new mongoose.Schema({
   score: { type: Number, min: 0, max: 10 },
   strengths: [String],
   improvements: [String],
+  feedback: { type: String },
   sources: [
     {
       topic: String,
@@ -45,6 +46,7 @@ const sessionSchema = new mongoose.Schema(
     items: [itemSchema],
     completedAt: { type: Date },
 overallFeedback: { type: String },
+timeTaken: { type: Number }, // seconds, sum of all items
   },
   { timestamps: true }
 );

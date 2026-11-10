@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken"
 import { auth } from '../middleware/auth.js';
  import { EMAIL_REGEX,
     isValidPassword,
-    normalizeEmail,bad ,isvaliduser, generateQuestions } from './helpers.js';
+    normalizeEmail,bad ,isvaliduser, generateQuestions ,EvaluateAnswer,generateOverallFeedback} from './helpers.js';
 
 
 
@@ -134,64 +134,183 @@ app.post('/api/session',auth, async(req,res)=>{
     res.status(500).json({ message: "Could not start session" });
   }
 });
-
-app.post('/api/session/:id/complete', auth ,async(req,res)=>{
-try{
-   const session = await sessionModel.findOne({
+app.post('/api/session/:id/complete', auth, async (req, res) => {
+  try {
+    const session = await sessionModel.findOne({
       _id: req.params.id,
-      user: req.userId, // start route wala hi
+      user: req.userId,
     });
-     if (!session) {
+    if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
     if (session.status === "completed") {
       return res.status(400).json({ message: "Session already completed" });
     }
 
+    // total score (percentage) - unanswered / failed items count as 0
+    let sum = 0;
+    let totalTime = 0;
+    for (const item of session.items) {
+      sum += typeof item.score === "number" ? item.score : 0;
+      totalTime += typeof item.timeTaken === "number" ? item.timeTaken : 0;
+    }
+    const maxScore = session.items.length * 10;
+    const totalScore = maxScore ? Math.round((sum / maxScore) * 100) : 0;
+
+    // overall feedback from Gemini, with fallback
+    let overallFeedback = "Interview completed. Review your answers below.";
+    try {
+      overallFeedback = await generateOverallFeedback(
+        session.items,
+        totalScore,
+        session.difficulty
+      );
+    } catch (err) {
+      console.error("Overall feedback failed:", err.message);
+    }
+
+    session.totalScore = totalScore;
+    session.overallFeedback = overallFeedback;
+    session.timeTaken = totalTime;
     session.status = "completed";
     session.completedAt = new Date();
     await session.save();
 
-  res.json(session);
-
-}
-catch(error){
-  res.status(500).json({message:'could not complete session'})
-}
+    res.json(session);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "could not complete session" });
+  }
 });
 
-app.post('/api/session/:id/answer',auth,async(req,res)=>{
-  try{
+app.post('/api/session/:id/answer', auth, async (req, res) => {
+  try {
+    const { itemIndex, answer, timeTaken } = req.body;
 
-    const{itemIndex, answer, timeTaken} =req.body;
-
-     const session = await sessionModel.findOne({
+    const session = await sessionModel.findOne({
       _id: req.params.id,
-      user: req.userId, // start route wala hi
+      user: req.userId,
     });
-       if (!session) {
+    if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
     if (session.status === "completed") {
       return res.status(400).json({ message: "Session already completed" });
     }
-    if (!session.items[itemIndex]) {
+
+    const item = session.items[itemIndex];
+    if (!item) {
       return res.status(400).json({ message: "Invalid question index" });
     }
-    if (!answer || !answer.trim()) {
+    if (typeof item.score === "number") {
+      return res.status(400).json({ message: "Question already answered" });
+    }
+    if (typeof answer !== "string" || !answer.trim()) {
       return res.status(400).json({ message: "Answer is required" });
     }
-      session.items[itemIndex].answer = answer;
-    session.items[itemIndex].timeTaken = timeTaken;
+
+    const cleanAnswer = answer.trim();
+    item.answer = cleanAnswer;
+    if (typeof timeTaken === "number") item.timeTaken = timeTaken;
+
+    let evalFailed = false;
+    try {
+      const result = await EvaluateAnswer(
+        item.question,
+        cleanAnswer,
+        item.topic,
+        session.difficulty
+      );
+      item.score = result.score;
+      item.feedback = result.feedback;
+      item.strengths = result.strengths;
+      item.improvements = result.improvements;
+    } catch (err) {
+      console.error("Evaluation failed:", err.message);
+      evalFailed = true;
+    }
+
     await session.save();
 
-    res.json({ message: "Answer saved" });
+    if (evalFailed) {
+      return res.status(502).json({
+        message: "Answer saved but evaluation failed, try again",
+      });
+    }
+
+    res.json({
+      message: "Answer evaluated",
+      score: item.score,
+      feedback: item.feedback,
+      strengths: item.strengths,
+      improvements: item.improvements,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Could not save answer" });
+  }
+});
+
+app.delete('/api/session/:id',auth,async(req,res)=>{
+  try{
+ 
+     const session = await sessionModel.findOne({
+      _id : req.params.id,
+      user :req.userId
+     })
+     if(!session){
+      // return res.status(404).json({message:'Session not found'});
+            
+        return bad(res,"Session not found",500)
+
+
+     }
+
+     return res.status(200).json({message:'Session deleted'})
 
   }
   catch(error){
-    res.status(500).json({message:"Could not save answer"})
+    res.status(500).json({message:"Unable to delete"})
   }
 });
+
+app.get('/api/session', auth, async (req, res) => {
+  try {
+    const sessions = await sessionModel
+      .find({ user: req.userId })
+      .sort({ createdAt: -1 })
+      .select("techStack status totalScore completedAt");
+
+    res.json(sessions);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Could not fetch sessions" });
+  }
+});
+
+app.get('/api/session/:id',auth,async(req,res)=>{
+ try {
+
+  const session =  await sessionModel.findOne({
+    _id : req.params.id,
+    user : req.userId
+  })
+
+  if(!session){
+      return bad(res,"Session not found",404)
+     }
+     return res.status(200).json(session);
+
+
+} catch (error) {
+    if (error.name === "CastError") {
+      return bad(res, "Session not found", 404);
+    }
+    console.error(error);
+    return bad(res, "Could not fetch session", 500);
+  }
+  
+});
+
 
 
  export {app};
