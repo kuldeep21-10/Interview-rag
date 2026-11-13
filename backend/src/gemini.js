@@ -11,3 +11,12 @@ export const askGemini = async (prompt) => {
   return response.text;
 };
 
+export const embedText = async (text, taskType = "RETRIEVAL_DOCUMENT") => {
+  const response = await ai.models.embedContent({
+    model: "gemini-embedding-001",
+    contents: text,
+    config: { taskType, outputDimensionality: 768 },
+  });
+  return response.embeddings[0].values;
+};
+

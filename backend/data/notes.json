@@ -1,0 +1,52 @@
+[
+  {
+    "topic": "JS",
+    "title": "var vs let vs const",
+    "content": "var is function-scoped, can be redeclared, and is hoisted with the value undefined. let and const are block-scoped and cannot be redeclared in the same scope. let can be reassigned, const cannot be reassigned, but the contents of a const object or array can still be changed (mutation). Use const by default, let when the value must change, and avoid var. A good answer covers scope (function vs block), redeclaration, reassignment, and the const-object mutation point, ideally with a short example like const c = {x: 1}; c.x = 5 working while c = {} throws a TypeError."
+  },
+  {
+    "topic": "JS",
+    "title": "Hoisting and Temporal Dead Zone",
+    "content": "Before running code, JavaScript registers declarations at the top of their scope. var declarations are hoisted and start as undefined. Function declarations are hoisted completely, so they can be called before they appear in the code. let and const are also hoisted, but they stay uninitialized until their declaration line runs. The time between the start of the scope and that line is the Temporal Dead Zone (TDZ), and touching the variable there throws a ReferenceError. A function expression stored in a var only hoists the variable name, so calling it early gives a TypeError (not a function). A good answer explains all three cases and mentions TDZ by name."
+  },
+  {
+    "topic": "JS",
+    "title": "== vs ===",
+    "content": "The == operator compares values after type coercion, so 5 == '5' is true. The === operator is strict equality: it checks both type and value with no coercion, so 5 === '5' is false. Best practice is to use === to avoid bugs from implicit conversion. Useful edge cases: null == undefined is true but null === undefined is false, NaN is not equal to itself with either operator (use Number.isNaN), and two different objects or arrays are never equal because they are compared by reference. A good answer defines coercion, gives an example, and recommends ===."
+  },
+  {
+    "topic": "JS",
+    "title": "Closures",
+    "content": "A closure is created when an inner function remembers the variables of its outer function, even after the outer function has finished running. Each call to the outer function creates a fresh set of variables, so two counters made from the same factory are independent. Common uses are data privacy, counters, memoization, and debounce. A classic interview trap is a var loop with setTimeout printing 3 3 3, because all callbacks share one function-scoped i; using let gives each iteration its own i and prints 0 1 2. A good answer defines a closure, gives a counter example, and mentions at least one practical use."
+  },
+  {
+    "topic": "JS",
+    "title": "this keyword, call, apply and bind",
+    "content": "The value of this depends on how a function is called. Default call: global object (undefined in strict mode). Method call obj.fn(): this is obj. With new: this is the newly created object. With call, apply or bind: this is set explicitly. Arrow functions have no own this and use the one from the surrounding scope. call(ctx, a, b) runs immediately with separate arguments, apply(ctx, [a, b]) runs immediately with an array, and bind(ctx) returns a new function without running it. A common trap is taking a method out of its object (const f = obj.show) and calling it, which loses this. A good answer lists the rules and explains the three methods."
+  },
+  {
+    "topic": "JS",
+    "title": "Event loop, microtasks and macrotasks",
+    "content": "JavaScript runs on a single thread. The event loop keeps checking whether the call stack is empty. When it is, it first runs every task in the microtask queue (promise then/catch/finally, queueMicrotask, code after await), and only then picks one task from the macrotask queue (setTimeout, setInterval, I/O). That is why Promise callbacks run before a setTimeout with 0 delay. For console.log('1'); setTimeout(2); Promise.then(3); console.log('4') the output is 1 4 3 2. A good answer explains the single thread, the two queues, the priority of microtasks, and walks through an output example."
+  },
+  {
+    "topic": "JS",
+    "title": "Promises and Promise combinators",
+    "content": "A Promise is in one of three states: pending, fulfilled, or rejected, and once settled its state never changes. Promises support chaining with then, and a catch can recover from an earlier error and let the chain continue. The combinators differ in how they wait: Promise.all resolves with all results but rejects as soon as one fails, Promise.allSettled waits for everything and reports each status, Promise.race settles with whichever finishes first (success or failure), and Promise.any returns the first success and only fails with an AggregateError if all fail. A rejection with no catch is an unhandled rejection, which can crash a Node process. A good answer names the states and compares the four combinators."
+  },
+  {
+    "topic": "JS",
+    "title": "async/await",
+    "content": "async/await is syntax built on top of Promises that lets asynchronous code read like synchronous code. An async function always returns a Promise, so return 5 becomes Promise.resolve(5). await pauses only that function until the Promise settles, without blocking the rest of the program, and the code after await continues as a microtask. Errors are handled with try/catch. Awaiting independent tasks one after another runs them sequentially, so use Promise.all to run them in parallel. forEach does not wait for async callbacks; use for...of or Promise.all with map instead. A good answer covers the return value, error handling, and sequential vs parallel execution."
+  },
+  {
+    "topic": "JS",
+    "title": "Shallow copy vs deep copy",
+    "content": "A shallow copy duplicates only the first level, so nested objects are still shared by reference between the original and the copy. Spread ({...obj}) and Object.assign make shallow copies: changing copy.address.city also changes the original, while changing a top-level primitive does not. A deep copy duplicates every level. The best modern option is structuredClone, which handles Date, Map and Set but throws on functions. JSON.parse(JSON.stringify(obj)) is a common trick but turns Dates into strings and drops functions and undefined. Libraries like lodash cloneDeep also work. A good answer explains the reference-sharing problem, shows a spread example, and names at least one deep copy method with its limits."
+  },
+  {
+    "topic": "JS",
+    "title": "Prototype and prototype chain",
+    "content": "Every object has a hidden link to another object called its prototype. When a property is not found on the object itself, JavaScript looks up the chain of prototypes until it reaches null. This is how inheritance works, and why array methods like map live on Array.prototype and not on each array. A constructor function has a prototype property that holds shared methods, while an object's __proto__ points to its constructor's prototype. Methods defined on the prototype are not own properties, so hasOwnProperty returns false for them. ES6 classes are syntax sugar over this same mechanism. A good answer explains the lookup chain, the difference between prototype and __proto__, and mentions classes as sugar."
+  }
+]

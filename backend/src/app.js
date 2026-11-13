@@ -4,6 +4,7 @@
  import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken"
 import { auth } from '../middleware/auth.js';
+import { retrieveNotes } from "./rag.js";
  import { EMAIL_REGEX,
     isValidPassword,
     normalizeEmail,bad ,isvaliduser, generateQuestions ,EvaluateAnswer,generateOverallFeedback} from './helpers.js';
@@ -107,33 +108,44 @@ app.get("/me", auth, async (req, res) => {
   }
 });
 
-app.post('/api/session',auth, async(req,res)=>{
-  try{
-     
-      const { techStack, difficulty = "medium", count = 5 } = req.body;
+app.post('/api/session', auth, async (req, res) => {
+  try {
+    const { techStack, difficulty = "medium", count = 5 } = req.body;
 
     if (!techStack || techStack.length === 0) {
       return res.status(400).json({ message: "techStack is required" });
     }
-     
-    const questions = await generateQuestions(techStack, difficulty, count);
-     const session = await sessionModel.create({
-  user: req.userId,
-  techStack,
-  difficulty,
-  items: questions.map((q) => ({
-    question: q.question,
-    topic: q.topic,
-  })),
-});
- res.status(201).json(session);
-  }
-  catch(error){
+
+    // pichhle 5 sessions ke questions, taaki wahi sawal dobara na aayein
+    const past = await sessionModel
+      .find({ user: req.userId })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("items.question")
+      .lean();
+    const avoid = past
+      .flatMap((s) => s.items.map((i) => i.question))
+      .slice(0, 30);
+
+    const questions = await generateQuestions(techStack, difficulty, count, avoid);
+
+    const session = await sessionModel.create({
+      user: req.userId,
+      techStack,
+      difficulty,
+      items: questions.map((q) => ({
+        question: q.question,
+        topic: q.topic,
+      })),
+    });
+    res.status(201).json(session);
+  } catch (error) {
     console.log(error);
-    
     res.status(500).json({ message: "Could not start session" });
   }
 });
+
+
 app.post('/api/session/:id/complete', auth, async (req, res) => {
   try {
     const session = await sessionModel.findOne({
@@ -215,16 +227,27 @@ app.post('/api/session/:id/answer', auth, async (req, res) => {
 
     let evalFailed = false;
     try {
+      // RAG: top 3 relevant notes (fail ho to bina notes ke evaluate hoga)
+      let notes = [];
+      try {
+        notes = await retrieveNotes(item.question, item.topic, 3);
+      } catch (err) {
+        console.error("Retrieval failed:", err.message);
+      }
+
       const result = await EvaluateAnswer(
         item.question,
         cleanAnswer,
         item.topic,
-        session.difficulty
+        session.difficulty,
+        notes
       );
       item.score = result.score;
       item.feedback = result.feedback;
       item.strengths = result.strengths;
       item.improvements = result.improvements;
+      item.usedRag = notes.length > 0;
+      item.sources = notes.map((n) => ({ topic: n.topic, title: n.title }));
     } catch (err) {
       console.error("Evaluation failed:", err.message);
       evalFailed = true;
@@ -244,8 +267,10 @@ app.post('/api/session/:id/answer', auth, async (req, res) => {
       feedback: item.feedback,
       strengths: item.strengths,
       improvements: item.improvements,
+      sources: item.sources,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Could not save answer" });
   }
 });
